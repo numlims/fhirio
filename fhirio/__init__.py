@@ -5,6 +5,7 @@ from functools import cmp_to_key
 import os
 import natsort
 import json
+from dip import dig
 OS_SORTED="os_sorted"
 PAGE_SORTED="page_sorted"
 def page_cmp(a:str, b:str):
