@@ -1,0 +1,288 @@
+# init
+
+``//__init__.py:
+
+``import``
+``const``
+``page_cmp``
+
+class fhirio:
+    ``read_entries``
+    ``bundle``
+    ``write_bundles``
+    ``fhir_bundle``
+``
+
+hold constants for sorting.
+
+``/const:
+OS_SORTED="os_sorted"
+PAGE_SORTED="page_sorted"
+``
+
+page_cmp sorts fhir file names first by page-number, then by time, like t1_p0, t2_p0, t3_p0, ..., t1_p1, t2_p1, t3_p1...
+
+assumes file name format 2026-06-25_16-41-05-999-Specimen_P131.json.
+
+see https://stackoverflow.com/a/36075587.
+
+``/page_cmp:
+def page_cmp(a:str, b:str):
+    ``.``
+``
+
+get the pagenumbers.
+
+``
+    #print("hello page_cmp")
+    pagea = int(re.findall('_P(\d+).json', a)[0])
+    pageb = int(re.findall('_P(\d+).json', b)[0])
+    #print("pagea: " + str(pagea))
+``
+
+compare by pagenumbers.
+
+``
+    if pagea > pageb:
+        return 1
+    elif pagea < pageb:
+        return -1
+``
+
+if it's the same page, break the tie with the datetime.
+
+get the datetime.
+
+``
+    datetimea = re.findall('^([0-9\-_]+)', a)
+    datetimeb = re.findall('^([0-9\-_]+)', b)
+``
+
+compare by datetime (as strings).
+
+``
+    if datetimea > datetimeb:
+        return 1
+    elif datetimea < datetimeb:
+        return -1
+    else:
+        return 0
+``
+
+import.
+
+``/import:
+import re
+``
+
+
+read_entries returns the fhir entries from all json files in a directory.
+
+sort PAGE_SORTED: it sorts the files page-number first, T1_p0, T2_p0, T3_p0, ..., T1_p1,
+T2_p1..., that's the way the cxx importer reads them.
+
+sort OS_SORTED: sort with the OS natsort.
+
+``/read_entries:
+    @staticmethod
+    def read_entries(dir, encoding="utf-8", sort=OS_SORTED): # todo could be static?
+        ``.``
+``
+
+collect the entries from the files in the dir.
+
+``
+        entries = []
+
+        files = os.listdir(dir)
+``
+
+use natsort to sort by date first, then pagenumbers, and get
+pagenumbers right, p1, p2, p3, ..., p10, p11 instead of p1, p10, p11,
+p2, p3 ...
+
+
+``
+        if sort == OS_SORTED:
+            #files = natsorted(files)  ## doesn't sort by page numbers first
+            files = natsort.os_sorted(files)
+``
+
+use page sort to sort by page number first, then date.  then the order
+is t1_p0, t2_p0, t3_p0, ..., t1_p1, t2_p1 etc.
+
+``
+        elif sort == PAGE_SORTED:
+            files.sort(key=cmp_to_key(page_cmp))
+``
+
+read the files.
+
+``
+        for file in files:
+          ``.``
+``
+
+only consider json files.
+
+``
+          _, ext = os.path.splitext(file)
+          # print("ext: " + ext)
+          if ext != ".json":
+            continue
+``
+
+load the json and append the entries it contains.
+
+attach the filename to the entry for debugging later.
+
+``
+          with open(os.path.join(dir, file), "r", encoding=encoding) as f:    
+            jsonin = json.load(f)
+
+            for entry in dig(jsonin, "entry"):
+              entry["_filename"] = file
+              entries.append(entry)
+``
+
+return the entries.
+
+``/read_entries
+        return entries
+``
+
+import.
+
+``/import
+from functools import cmp_to_key
+import os
+import natsort
+import json
+``
+
+bundle puts n entries in a bundle each and returns the list of bundles.
+
+``/bundle:
+    def bundle(entries, n, restype:str=None, cxx:int=None) -> list:
+        ``.``
+``
+
+turn each batch of entries into a bundle.
+
+``
+        bundles = []
+        batch = []
+        
+        for i, entry in enumerate(entries):
+            # after each n entries
+            if i > 0 and i % n == 0:
+                # append a bundle of the full batch
+                bundles.append(fhir_bundle(batch, restype=restype, cxx=cxx))
+                # reset the batch
+                batch = []
+            # add to the batch
+            batch.append(entry)
+``
+
+append the last batch and return.
+
+``
+        bundles.append(fhir_bundle(batch, restype=restype, cxx=cxx))
+
+        return bundles
+``
+
+write_bundles writes fhir bundles into a directory one bundle per
+file, returning a list of the files written. it wraps the files into a
+timestamped directory if wrap is True. outname overwrites the default
+timestamps and typ names for the written.
+
+``/write_bundles:
+def write_bundles(bundles:list, dir:str, typ:str=None, wrap:bool=False, outname:str=None):
+    ``.``
+``
+
+
+use timestamp and typ if no outname is passed.
+
+``
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    if outname is None:
+        outname = timestamp
+        if typ is not None:
+            outname += "_" + typ
+``
+
+wrap the output into a timestamped directory if wished.
+
+``
+    outdir = None
+    if wrap:
+        outdir = os.path.join(dir, timestamp)
+    else:
+        outdir = dir
+``
+
+create the output directory.
+
+``
+    os.makedirs(outdir, exist_ok=True)    
+``
+
+how broad should the zero-place holder for the pagenumber in the filenames be? (eg for 999 pages 3, for 1000 pages 4)
+
+``
+    page_num_width = str(int(math.log10(len(bundles))) + 1)
+
+    out = []
+``
+
+write each bundle in a seperate file, using the same outname and increasing page numbers.
+
+``
+    for i, bundle in enumerate(bundles):
+        fstring = "%s_P%0" + page_num_width + "d.json"
+        filename = fstring % (outname, i)
+        # filename = timestamp + "_" + type + "_p" + str(i) + ".json"
+        path = os.path.join(outdir, filename)
+        out.append(path)
+        with open(path, 'w', encoding='utf-8') as outf:
+            json.dump(bundle, outf, indent=4, ensure_ascii=False)
+``
+
+return the paths of all written files.
+
+``
+    return out
+``
+
+fhir_bundle packs a list of entries into a fhir bundle.
+
+``/fhir_bundle:
+def fhir_bundle(entries:list, restype:str=None, cxx:int=3):
+    ``.``
+``
+
+the bundle holds the entries.
+
+``
+    bundle = {
+        "type": "transaction",
+        "entry": entries
+    }
+``
+
+set resource type to bundle for cxx3, to the specific type for cxx4.
+
+``
+    if cxx == 3:
+        bundle["resourceType"] = "Bundle"
+    elif cxx == 4:
+        bundle["resourceType"] = restype
+``
+
+return.
+
+``
+    return bundle
+``

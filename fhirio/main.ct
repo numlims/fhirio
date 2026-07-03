@@ -1,0 +1,32 @@
+__main__ is there to print the fhirio version.
+
+``//__main__.py:
+``import``
+``main``
+sys.exit(main())
+``
+
+main adds a version flag.
+
+``/main:
+def main():
+    ``.``
+``
+
+parse arguments.
+
+``
+    parser = argparse.ArgumentParser(description="read and write fhir resources.")
+    versionflag.flag(parser, "fhirio")
+    args = parser.parse_args()
+``
+
+import.
+
+``/import:
+import argparse
+import versionflag
+import sys
+``
+
+
