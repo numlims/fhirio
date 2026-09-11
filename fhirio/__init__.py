@@ -37,7 +37,7 @@ def page_cmp(a:str, b:str):
         return 0
 
 @staticmethod
-def read_entries(dir, encoding="utf-8", sort=OS_SORTED): # todo could be static?
+def read_entries(dir, encoding="utf-8", sort=OS_SORTED, keep_filenames:bool=False): # todo could be static?
     """
      read_entries returns the fhir entries from all json files in a directory.
      
@@ -61,7 +61,8 @@ def read_entries(dir, encoding="utf-8", sort=OS_SORTED): # todo could be static?
       with open(os.path.join(dir, file), "r", encoding=encoding) as f:    
         jsonin = json.load(f)
         for entry in dig(jsonin, "entry"):
-          entry["_filename"] = file
+          if keep_filenames is True:
+            entry["_filename"] = file
           entries.append(entry)
     return entries
 def read_bundles_by_file(dir, encoding="utf-8"):
@@ -117,7 +118,7 @@ def write_bundles(bundles:list, dir:str, typ:str=None, wrap:bool=False, outname:
     out = []
     for i, bundle in enumerate(bundles):
         fstring = "%s_P%0" + page_num_width + "d.json"
-        filename = fstring % (outname, i)
+        filename = fstring % (outname, i+1)
         # filename = timestamp + "_" + type + "_p" + str(i) + ".json"
         path = os.path.join(outdir, filename)
         out.append(path)
