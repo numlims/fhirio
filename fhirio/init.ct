@@ -6,11 +6,13 @@
 ``const``
 ``page_cmp``
 
-class fhirio:
-    ``read_entries``
-    ``bundle``
-    ``write_bundles``
-    ``fhir_bundle``
+``read_entries``
+``read_bundles_by_file``
+``bundle``
+``write_bundles``
+``write_bundles_by_file``
+``fhir_bundle``
+
 ``
 
 hold constants for sorting.
@@ -84,17 +86,16 @@ T2_p1..., that's the way the cxx importer reads them.
 sort OS_SORTED: sort with the OS natsort.
 
 ``/read_entries:
-    @staticmethod
-    def read_entries(dir, encoding="utf-8", sort=OS_SORTED): # todo could be static?
-        ``.``
+@staticmethod
+def read_entries(dir, encoding="utf-8", sort=OS_SORTED): # todo could be static?
+    ``.``
 ``
 
 collect the entries from the files in the dir.
 
 ``
-        entries = []
-
-        files = os.listdir(dir)
+    entries = []
+    files = os.listdir(dir)
 ``
 
 use natsort to sort by date first, then pagenumbers, and get
@@ -103,33 +104,33 @@ p2, p3 ...
 
 
 ``
-        if sort == OS_SORTED:
-            #files = natsorted(files)  ## doesn't sort by page numbers first
-            files = natsort.os_sorted(files)
+    if sort == OS_SORTED:
+        #files = natsorted(files)  ## doesn't sort by page numbers first
+        files = natsort.os_sorted(files)
 ``
 
 use page sort to sort by page number first, then date.  then the order
 is t1_p0, t2_p0, t3_p0, ..., t1_p1, t2_p1 etc.
 
 ``
-        elif sort == PAGE_SORTED:
-            files.sort(key=cmp_to_key(page_cmp))
+    elif sort == PAGE_SORTED:
+        files.sort(key=cmp_to_key(page_cmp))
 ``
 
 read the files.
 
 ``
-        for file in files:
-          ``.``
+    for file in files:
+      ``.``
 ``
 
 only consider json files.
 
 ``
-          _, ext = os.path.splitext(file)
-          # print("ext: " + ext)
-          if ext != ".json":
-            continue
+      _, ext = os.path.splitext(file)
+      # print("ext: " + ext)
+      if ext != ".json":
+        continue
 ``
 
 load the json and append the entries it contains.
@@ -137,18 +138,17 @@ load the json and append the entries it contains.
 attach the filename to the entry for debugging later.
 
 ``
-          with open(os.path.join(dir, file), "r", encoding=encoding) as f:    
-            jsonin = json.load(f)
-
-            for entry in dig(jsonin, "entry"):
-              entry["_filename"] = file
-              entries.append(entry)
+      with open(os.path.join(dir, file), "r", encoding=encoding) as f:    
+        jsonin = json.load(f)
+        for entry in dig(jsonin, "entry"):
+          entry["_filename"] = file
+          entries.append(entry)
 ``
 
 return the entries.
 
 ``/read_entries
-        return entries
+    return entries
 ``
 
 import.
@@ -161,36 +161,66 @@ import json
 from dip import dig
 ``
 
+read_bundles_by_file returns a dictionary of the whole contents of fhir files keys by filename.
+
+``/read_bundles_by_file:
+def read_bundles_by_file(dir, encoding="utf-8"):
+    ``.``
+``
+
+get the filenames.
+
+``
+    files = os.listdir(dir)
+``
+
+read the files and remember their contents keyed by filename.
+
+``
+    bundles = {}
+    for filename in files:
+        with open(os.path.join(dir, filename), "r") as f:
+            jsonin = json.load(f)
+            bundles[filename] = jsonin
+``
+
+return the bundles.
+
+``
+    return bundles
+``
+
+
 bundle puts n entries in a bundle each and returns the list of bundles.
 
 ``/bundle:
-    def bundle(entries, n, restype:str=None, cxx:int=None) -> list:
-        ``.``
+def bundle(entries, n, restype:str=None, cxx:int=None) -> list:
+    ``.``
 ``
 
 turn each batch of entries into a bundle.
 
 ``
-        bundles = []
-        batch = []
+    bundles = []
+    batch = []
         
-        for i, entry in enumerate(entries):
-            # after each n entries
-            if i > 0 and i % n == 0:
-                # append a bundle of the full batch
-                bundles.append(fhir_bundle(batch, restype=restype, cxx=cxx))
-                # reset the batch
-                batch = []
-            # add to the batch
-            batch.append(entry)
+    for i, entry in enumerate(entries):
+        # after each n entries
+        if i > 0 and i % n == 0:
+            # append a bundle of the full batch
+            bundles.append(fhir_bundle(batch, restype=restype, cxx=cxx))
+            # reset the batch
+            batch = []
+        # add to the batch
+        batch.append(entry)
 ``
 
 append the last batch and return.
 
 ``
-        bundles.append(fhir_bundle(batch, restype=restype, cxx=cxx))
+    bundles.append(fhir_bundle(batch, restype=restype, cxx=cxx))
 
-        return bundles
+    return bundles
 ``
 
 write_bundles writes fhir bundles into a directory one bundle per
@@ -256,6 +286,40 @@ return the paths of all written files.
 ``
     return out
 ``
+
+import.
+
+``/import
+from datetime import datetime
+import math
+import json
+``
+
+
+
+write_bundles_by_file writes a dict of fhir bundles keyed by
+filename into a given directory, one bundle per file.
+
+``/write_bundles_by_file:
+def write_bundles_by_file(bundles:dict, outdir:str):
+    ``.``
+``
+
+create the output directory if not there.
+
+``
+    os.makedirs(outdir, exist_ok=True)
+``
+
+go over the bundles and write them.
+
+``
+    for filename, bundle in bundles.items():
+        path = os.path.join(outdir, filename)
+        with open(path, "w") as outfile:
+            json.dump(bundle, outfile, indent=4, ensure_ascii=False)
+``
+
 
 fhir_bundle packs a list of entries into a fhir bundle.
 

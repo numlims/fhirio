@@ -3,7 +3,7 @@
 read and write fhir resources.
 
 ```
-from fhirio import fhirio
+import fhirio
 entries = fhirio.read_entries("my/input/dir")
 ```
 
